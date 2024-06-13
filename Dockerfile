@@ -12,5 +12,4 @@ COPY . .
 
 RUN bun install
 
-# ENTRYPOINT [ "bun", "start" ]
-ENTRYPOINT ["tail", "-f","/dev/null"]
+ENTRYPOINT [ "bun", "start" ]

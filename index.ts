@@ -85,7 +85,9 @@ import "dotenv/config";
       for (let k of Object.keys(c)) {
         c[k] = (<number>c[k]).toFixed(4);
       }
-      console.log("classification", timeMs + "ms.", c);
+      if ((c["ring"] as number) > 0.8) {
+        console.log("ring detected");
+      }
     });
   } catch (ex) {
     console.error(ex);
