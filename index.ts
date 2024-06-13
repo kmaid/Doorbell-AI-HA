@@ -40,29 +40,17 @@ import "dotenv/config";
     if (devices.length === 0) {
       devices = [{ id: "", name: "Default microphone" }];
     }
-    if (devices.length > 1 && !process.argv[3]) {
+    let device;
+    const hwId = "hw:2,0";
+    let d = devices.find((x) => x.id === hwId);
+    if (!d) {
       throw new Error(
-        "Multiple microphones found (" +
-          devices.map((n) => '"' + n.name + '"').join(", ") +
-          "), " +
-          "add the microphone to use to this script (node classify-audio.js model.eim microphone)"
+        `Invalid microphone id (${hwId}), found: ${devices
+          .map((n) => '"' + n.name + '"')
+          .join(", ")}`
       );
     }
-    let device;
-    if (process.argv[3]) {
-      let d = devices.find((x) => x.name === process.argv[3]);
-      if (!d) {
-        throw new Error(
-          "Invalid microphone name (" +
-            process.argv[3] +
-            "), found: " +
-            devices.map((n) => '"' + n.name + '"').join(", ")
-        );
-      }
-      device = d.id;
-    } else {
-      device = devices[0].id;
-    }
+    device = d.id;
 
     let audioClassifier = new AudioClassifier(runner, false /* verbose */);
 
