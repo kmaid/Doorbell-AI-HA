@@ -1,0 +1,9 @@
+version: "3.9"
+services:
+  doorbell-ai-ha:
+    container_name: doorbell-ai-ha
+    restart: unless-stopped
+    build: .
+    pull_policy: build
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
