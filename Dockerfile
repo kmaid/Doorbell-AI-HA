@@ -1,7 +1,10 @@
-FROM oven/bun:alpine
+FROM oven/bun:latest
 
 WORKDIR /App
 
 COPY . .
 
-ENTRYPOINT [ "bun", "start" ]
+RUN bun install
+
+# ENTRYPOINT [ "bun", "start" ]
+ENTRYPOINT ["tail", "-f","/dev/null"]

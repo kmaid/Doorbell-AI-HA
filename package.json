@@ -14,7 +14,7 @@
     "typescript": "^5.0.0"
   },
   "scripts": {
-    "start": "tsx index.ts"
+    "start": "bun run index.ts"
   },
   "trustedDependencies": [
     "sharp"
