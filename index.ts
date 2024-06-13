@@ -9,7 +9,9 @@ import "dotenv/config";
 // tslint:disable-next-line: no-floating-promises
 (async () => {
   try {
-    let runner = new LinuxImpulseRunner("./model/doorbell_x64.eim");
+    let runner = new LinuxImpulseRunner(
+      "model/kmaid-project-1-linux-x86_64-v11.eim"
+    );
     let model = await runner.init();
 
     const windowLengthMs =
