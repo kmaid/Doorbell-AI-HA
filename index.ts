@@ -88,6 +88,7 @@ let debounce = false;
       }
       if ((c["ring"] as number) > 0.8) {
         if (!debounce) {
+          debounce = true;
           console.log("ring detected");
           try {
             const result = await fetch(
@@ -107,7 +108,7 @@ let debounce = false;
               result
             );
             setTimeout(() => {
-              debounce = true;
+              debounce = false;
             }, 5000);
           } catch (e) {
             console.log(e);
