@@ -41,11 +41,10 @@ import "dotenv/config";
       devices = [{ id: "", name: "Default microphone" }];
     }
     let device;
-    const hwId = "hw:2,0";
-    let d = devices.find((x) => x.id === hwId);
+    let d = devices.find((x) => x.id === process.env.MIC_HW_ID);
     if (!d) {
       throw new Error(
-        `Invalid microphone id (${hwId}), found: ${devices
+        `Invalid microphone id (${process.env.MIC_HW_ID}), found: ${devices
           .map((n) => '"' + n.name + '"')
           .join(", ")}`
       );
@@ -75,7 +74,7 @@ import "dotenv/config";
 
     // when new data comes in, this handler is called.
     // Use it to draw conclusions, send interesting events to the cloud etc.
-    audioClassifier.on("result", (ev, timeMs, audioAsPcm) => {
+    audioClassifier.on("result", async (ev, timeMs, audioAsPcm) => {
       if (!ev.result.classification) return;
 
       // print the raw predicted values for this frame
@@ -87,6 +86,26 @@ import "dotenv/config";
       }
       if ((c["ring"] as number) > 0.8) {
         console.log("ring detected");
+        try {
+          const result = await fetch(
+            new URL(
+              process.env["HOMEASSISTANT_URL"]!,
+              `api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`
+            ).toString(),
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          console.log(
+            `Received response from Home Assistant webhook endpoint:`,
+            result
+          );
+        } catch (e) {
+          console.log(e);
+        }
       }
     });
   } catch (ex) {

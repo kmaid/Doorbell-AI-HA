@@ -8,3 +8,7 @@ services:
     privileged: true
     devices:
       - /dev/bus/usb:/dev/bus/usb
+    environment:
+      - HOMEASSISTANT_URL=${HOMEASSISTANT_URL}
+      - HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID=${HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID}
+      - MIC_HW_ID=${MIC_HW_ID}
