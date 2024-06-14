@@ -6,6 +6,8 @@ import {
 
 import "dotenv/config";
 
+let debounce = false;
+
 // tslint:disable-next-line: no-floating-promises
 (async () => {
   try {
@@ -85,26 +87,33 @@ import "dotenv/config";
         c[k] = (<number>c[k]).toFixed(4);
       }
       if ((c["ring"] as number) > 0.8) {
-        console.log("ring detected");
-        try {
-          const result = await fetch(
-            new URL(
-              process.env["HOMEASSISTANT_URL"]!,
-              `api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`
-            ).toString(),
-            {
-              method: "GET",
-              headers: {
-                "Content-Type": "application/json",
-              },
-            }
-          );
-          console.log(
-            `Received response from Home Assistant webhook endpoint:`,
-            result
-          );
-        } catch (e) {
-          console.log(e);
+        if (!debounce) {
+          console.log("ring detected");
+          try {
+            const result = await fetch(
+              new URL(
+                `/api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`,
+                process.env["HOMEASSISTANT_URL"]!
+              ).toString(),
+              {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+            console.log(
+              `Received response from Home Assistant webhook endpoint:`,
+              result
+            );
+            setTimeout(() => {
+              debounce = true;
+            }, 5000);
+          } catch (e) {
+            console.log(e);
+          }
+        } else {
+          console.log("ring detected but skipping");
         }
       }
     });
