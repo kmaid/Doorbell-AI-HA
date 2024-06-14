@@ -91,21 +91,14 @@ let debounce = false;
           debounce = true;
           console.log("ring detected");
           try {
-            const result = await fetch(
+            await fetch(
               new URL(
                 `/api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`,
                 process.env["HOMEASSISTANT_URL"]!
               ).toString(),
               {
                 method: "GET",
-                headers: {
-                  "Content-Type": "application/json",
-                },
               }
-            );
-            console.log(
-              `Received response from Home Assistant webhook endpoint:`,
-              result
             );
             setTimeout(() => {
               debounce = false;
