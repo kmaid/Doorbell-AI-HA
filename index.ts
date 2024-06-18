@@ -12,7 +12,7 @@ let debounce = false;
 (async () => {
   try {
     let runner = new LinuxImpulseRunner(
-      "model/kmaid-project-1-linux-x86_64-v11.eim"
+      "model/kmaid-project-1-linux-x86_64-v17.eim"
     );
     let model = await runner.init();
 
@@ -86,10 +86,12 @@ let debounce = false;
       for (let k of Object.keys(c)) {
         c[k] = (<number>c[k]).toFixed(4);
       }
-      if ((c["ring"] as number) > 0.8) {
+      if ((c["ring"] as number) > 0.2) {
+        console.log(`ring detected: ${c["ring"]}`);
+      }
+      if ((c["ring"] as number) > 0.9) {
         if (!debounce) {
           debounce = true;
-          console.log("ring detected");
           try {
             await fetch(
               new URL(
@@ -100,14 +102,14 @@ let debounce = false;
                 method: "GET",
               }
             );
+            console.log("Debounce started");
             setTimeout(() => {
+              console.log("Debounce finished");
               debounce = false;
             }, 5000);
           } catch (e) {
             console.log(e);
           }
-        } else {
-          console.log("ring detected but skipping");
         }
       }
     });
