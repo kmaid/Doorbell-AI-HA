@@ -73,10 +73,9 @@ let debounce = false;
     });
 
     await audioClassifier.start(device);
-
     // when new data comes in, this handler is called.
     // Use it to draw conclusions, send interesting events to the cloud etc.
-    audioClassifier.on("result", async (ev, timeMs, audioAsPcm) => {
+    audioClassifier.on("result", async (ev) => {
       if (!ev.result.classification) return;
 
       // print the raw predicted values for this frame
@@ -89,27 +88,25 @@ let debounce = false;
       if ((c["ring"] as number) > 0.2) {
         console.log(`ring detected: ${c["ring"]}`);
       }
-      if ((c["ring"] as number) > 0.8) {
-        if (!debounce) {
-          debounce = true;
-          try {
-            await fetch(
-              new URL(
-                `/api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`,
-                process.env["HOMEASSISTANT_URL"]!
-              ).toString(),
-              {
-                method: "GET",
-              }
-            );
-            console.log("Debounce started");
-            setTimeout(() => {
-              console.log("Debounce finished");
-              debounce = false;
-            }, 1000 * 30);
-          } catch (e) {
-            console.log(e);
-          }
+      if ((c["ring"] as number) > 0.95 && !debounce) {
+        debounce = true;
+        try {
+          await fetch(
+            new URL(
+              `/api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`,
+              process.env["HOMEASSISTANT_URL"]!
+            ).toString(),
+            {
+              method: "GET",
+            }
+          );
+          console.log("Debounce started");
+          setTimeout(() => {
+            console.log("Debounce finished");
+            debounce = false;
+          }, 1000 * 30);
+        } catch (e) {
+          console.log(e);
         }
       }
     });
