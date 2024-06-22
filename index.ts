@@ -75,7 +75,7 @@ let debounce = false;
     await audioClassifier.start(device);
     // when new data comes in, this handler is called.
     // Use it to draw conclusions, send interesting events to the cloud etc.
-    audioClassifier.on("result", async (ev) => {
+    audioClassifier.on("result", async (ev, _, __) => {
       if (!ev.result.classification) return;
 
       // print the raw predicted values for this frame
