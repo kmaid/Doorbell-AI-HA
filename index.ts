@@ -6,13 +6,11 @@ import {
 
 import "dotenv/config";
 
-let debounce = false;
-
 // tslint:disable-next-line: no-floating-promises
 (async () => {
   try {
     let runner = new LinuxImpulseRunner(
-      "model/kmaid-project-1-linux-x86_64-v24.eim"
+      "model/kmaid-project-1-linux-x86_64-v22.eim"
     );
     let model = await runner.init();
 
@@ -88,26 +86,8 @@ let debounce = false;
       if ((c["ring"] as number) > 0.2) {
         console.log(`ring detected: ${c["ring"]}`);
       }
-      if ((c["ring"] as number) > 0.9 && !debounce) {
-        debounce = true;
-        try {
-          await fetch(
-            new URL(
-              `/api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`,
-              process.env["HOMEASSISTANT_URL"]!
-            ).toString(),
-            {
-              method: "GET",
-            }
-          );
-          console.log("Debounce started");
-          setTimeout(() => {
-            console.log("Debounce finished");
-            debounce = false;
-          }, 1000 * 30);
-        } catch (e) {
-          console.log(e);
-        }
+      if ((c["ring"] as number) > 0.9) {
+        await ringDetected();
       }
     });
   } catch (ex) {
@@ -115,3 +95,28 @@ let debounce = false;
     process.exit(1);
   }
 })();
+
+let rings = 0;
+const ringDetected = async () => {
+  rings++;
+  console.log("Debounce started");
+  setTimeout(() => {
+    rings = 0;
+    console.log("Debounce finished");
+  }, 1000 * 15);
+  if (rings === 2) {
+    try {
+      await fetch(
+        new URL(
+          `/api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`,
+          process.env["HOMEASSISTANT_URL"]!
+        ).toString(),
+        {
+          method: "GET",
+        }
+      );
+    } catch (e) {
+      console.log(e);
+    }
+  }
+};
