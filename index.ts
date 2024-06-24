@@ -12,7 +12,7 @@ let debounce = false;
 (async () => {
   try {
     let runner = new LinuxImpulseRunner(
-      "model/kmaid-project-1-linux-x86_64-v22.eim"
+      "model/kmaid-project-1-linux-x86_64-v24.eim"
     );
     let model = await runner.init();
 
@@ -88,7 +88,7 @@ let debounce = false;
       if ((c["ring"] as number) > 0.2) {
         console.log(`ring detected: ${c["ring"]}`);
       }
-      if ((c["ring"] as number) > 0.95 && !debounce) {
+      if ((c["ring"] as number) > 0.9 && !debounce) {
         debounce = true;
         try {
           await fetch(
