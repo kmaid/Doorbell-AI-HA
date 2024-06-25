@@ -86,11 +86,11 @@ const RING_THRESHOLD = 3;
       for (let k of Object.keys(c)) {
         c[k] = (<number>c[k]).toFixed(4);
       }
-      if ((c["ring"] as number) > 0.2) {
-        console.log(`Rings:${rings}/${RING_THRESHOLD} Score:${c["ring"]}`);
-      }
       if ((c["ring"] as number) > 0.9) {
         await ringDetected();
+      }
+      if ((c["ring"] as number) > 0.2) {
+        console.log(`Rings:${rings}/${RING_THRESHOLD} Score:${c["ring"]}`);
       }
     });
   } catch (ex) {
