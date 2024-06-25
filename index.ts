@@ -6,6 +6,9 @@ import {
 
 import "dotenv/config";
 
+let rings = 0;
+const RING_THRESHOLD = 3;
+
 // tslint:disable-next-line: no-floating-promises
 (async () => {
   try {
@@ -84,7 +87,7 @@ import "dotenv/config";
         c[k] = (<number>c[k]).toFixed(4);
       }
       if ((c["ring"] as number) > 0.2) {
-        console.log(`ring detected: ${c["ring"]}`);
+        console.log(`Rings:${rings}/${RING_THRESHOLD} Score:${c["ring"]}`);
       }
       if ((c["ring"] as number) > 0.9) {
         await ringDetected();
@@ -96,16 +99,17 @@ import "dotenv/config";
   }
 })();
 
-let rings = 0;
 const ringDetected = async () => {
   rings++;
-  console.log("Debounce started");
-  setTimeout(() => {
-    rings = 0;
-    console.log("Debounce finished");
-  }, 1000 * 15);
-  if (rings === 2) {
+  if (rings === 1) {
+    console.log(`Debounce started ${rings}`);
+    setTimeout(() => {
+      rings = 0;
+      console.log("Debounce finished");
+    }, 1000 * 15);
+  } else if (rings === RING_THRESHOLD) {
     try {
+      console.log("Ringing...");
       await fetch(
         new URL(
           `/api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`,
@@ -116,7 +120,7 @@ const ringDetected = async () => {
         }
       );
     } catch (e) {
-      console.log(e);
+      console.error(e);
     }
   }
 };
