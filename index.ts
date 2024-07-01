@@ -40,16 +40,14 @@ const RING_THRESHOLD = 5;
 
     // Find the right microphone to run this model with (can be passed in as argument to the script)
     let devices = await AudioRecorder.ListDevices();
-    if (devices.length === 0) {
-      devices = [{ id: "", name: "Default microphone" }];
-    }
     let device;
-    let d = devices.find((x) => x.id === process.env.MIC_HW_ID);
+    let d = devices.find((x) => x.name === process.env["MIC_NAME"]);
     if (!d) {
       throw new Error(
-        `Invalid microphone id (${process.env.MIC_HW_ID}), found: ${devices
-          .map((n) => '"' + n.name + '"')
-          .join(", ")}`
+        "Invalid microphone name (" +
+          process.argv[3] +
+          "), found: " +
+          devices.map((n) => '"' + n.name + '"').join(", ")
       );
     }
     device = d.id;
@@ -100,9 +98,9 @@ const RING_THRESHOLD = 5;
 })();
 
 const ringDetected = async () => {
-  console.log(`Debounce started`);
   rings++;
   if (rings === 1) {
+    console.log(`Debounce started`);
     setTimeout(() => {
       rings = 0;
       console.log("Debounce finished");
