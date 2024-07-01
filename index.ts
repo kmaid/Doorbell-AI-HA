@@ -7,7 +7,7 @@ import {
 import "dotenv/config";
 
 let rings = 0;
-const RING_THRESHOLD = 3;
+const RING_THRESHOLD = 5;
 
 // tslint:disable-next-line: no-floating-promises
 (async () => {
@@ -100,13 +100,13 @@ const RING_THRESHOLD = 3;
 })();
 
 const ringDetected = async () => {
+  console.log(`Debounce started`);
   rings++;
   if (rings === 1) {
-    console.log(`Debounce started ${rings}`);
     setTimeout(() => {
       rings = 0;
       console.log("Debounce finished");
-    }, 1000 * 15);
+    }, 1000 * 10);
   } else if (rings === RING_THRESHOLD) {
     try {
       console.log("Ringing...");
