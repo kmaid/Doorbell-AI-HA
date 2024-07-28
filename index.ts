@@ -63,10 +63,6 @@ const RING_THRESHOLD = 5;
       console.log(
         "  Are you running this command from a simulated shell (like in Visual Studio Code)?"
       );
-      console.log(
-        "* If you are on Linux and use a microphone in a webcam, you might also want"
-      );
-      console.log("  to initialize the camera (see camera.js)");
       await audioClassifier?.stop();
       process.exit(1);
     });
@@ -104,7 +100,7 @@ const ringDetected = async () => {
     setTimeout(() => {
       rings = 0;
       console.log("Debounce finished");
-    }, 1000 * 10);
+    }, 1000 * 60);
   } else if (rings === RING_THRESHOLD) {
     try {
       console.log("Ringing...");
