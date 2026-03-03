@@ -12,3 +12,5 @@ services:
       - HOMEASSISTANT_URL=${HOMEASSISTANT_URL}
       - HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID=${HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID}
       - MIC_NAME=${MIC_NAME}
+    labels:
+      - com.centurylinklabs.watchtower.enable=false
