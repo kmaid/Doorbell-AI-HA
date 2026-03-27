@@ -6,8 +6,11 @@ services:
     build: .
     pull_policy: build
     privileged: true
+    group_add:
+      - "audio"
     devices:
       - /dev/bus/usb:/dev/bus/usb
+      - /dev/snd:/dev/snd
     environment:
       - HOMEASSISTANT_URL=${HOMEASSISTANT_URL}
       - HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID=${HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID}
