@@ -19,11 +19,11 @@ test("clips are written as wav with details, and pruned by age and size", () => 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clips-"));
   const store = new ClipStore(dir, 30, 1e9);
   const pcm = Int16Array.from({ length: 16000 }, (_, i) => (i % 200) - 100);
-  const info = { peakS: 0.9, maxHarmonics: 10 };
+  const info = { by: "matcher" as const, score: 0.9, windowS: 0.53, margin: 0.27 };
   const a = store.save(pcm, 16000, { ...info, startedAt: "2026-01-01T10:00:00.000Z", fired: true });
   const b = store.save(pcm, 16000, { ...info, startedAt: "2026-02-20T10:00:00.000Z", fired: false });
-  expect(a).toBe("20260101T100000Z-fired");
-  expect(b).toBe("20260220T100000Z-near");
+  expect(a).toBe("20260101T100000Z-matcher-fired");
+  expect(b).toBe("20260220T100000Z-matcher-near");
   const back = readWav(path.join(dir, "2026-01-01", `${a}.wav`));
   expect(back.sampleRate).toBe(16000);
   expect([...back.pcm.slice(0, 5)]).toEqual([...pcm.slice(0, 5)]);

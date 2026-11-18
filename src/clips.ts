@@ -4,10 +4,16 @@ import path from "node:path";
 export interface ClipInfo {
   startedAt: string;
   durationS: number;
-  /** Most ring-like sound within the detector's fast window, in seconds. */
-  peakS: number;
-  maxHarmonics: number;
+  /** Which detector the clip was saved for. */
+  by: "matcher" | "model";
+  /** Whether that detector reached the point of ringing (it may be the one that only logs). */
   fired: boolean;
+  /** Matcher: best score, the window it was scored over, and its distance from firing. */
+  score?: number;
+  windowS?: number;
+  margin?: number;
+  /** Model: highest ring score and the number of results above 0.95. */
+  results?: number;
 }
 
 export function wav(pcm: Int16Array, sampleRate: number): Buffer {
@@ -67,7 +73,7 @@ export class AudioHistory {
 }
 
 /**
- * Clips live in <dir>/YYYY-MM-DD/<time>-<fired|near>.wav with a .json beside each.
+ * Clips live in <dir>/YYYY-MM-DD/<time>-<matcher|model>-<fired|near>.wav with a .json beside each.
  * Old clips are removed by age, then oldest first while over the size limit.
  */
 export class ClipStore {
@@ -75,7 +81,7 @@ export class ClipStore {
 
   save(pcm: Int16Array, sampleRate: number, info: Omit<ClipInfo, "durationS">): string {
     const stamp = info.startedAt.replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
-    const base = path.join(this.dir, info.startedAt.slice(0, 10), `${stamp}-${info.fired ? "fired" : "near"}`);
+    const base = path.join(this.dir, info.startedAt.slice(0, 10), `${stamp}-${info.by}-${info.fired ? "fired" : "near"}`);
     fs.mkdirSync(path.dirname(base), { recursive: true });
     fs.writeFileSync(`${base}.wav`, wav(pcm, sampleRate));
     const full: ClipInfo = { ...info, durationS: Math.round((pcm.length / sampleRate) * 100) / 100 };
