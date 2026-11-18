@@ -1,120 +1,116 @@
-import {
-  AudioClassifier,
-  AudioRecorder,
-  LinuxImpulseRunner,
-} from "edge-impulse-linux";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
 
-import "dotenv/config";
+import { RingDetector, SAMPLE_RATE, defaultRingConfig } from "./src/ring";
 
-let rings = 0;
-const RING_THRESHOLD = 5;
+const fail = (...msg: unknown[]) => {
+  console.error(...msg);
+  process.exit(1);
+};
 
-// tslint:disable-next-line: no-floating-promises
-(async () => {
-  try {
-    let runner = new LinuxImpulseRunner(
-      "model/kmaid-project-1-linux-x86_64-v22.eim"
-    );
-    let model = await runner.init();
+const num = (name: string, fallback: number) => {
+  const v = Number(process.env[name]);
+  return process.env[name] && Number.isFinite(v) ? v : fallback;
+};
 
-    const windowLengthMs =
-      (model.modelParameters.input_features_count /
-        model.modelParameters.frequency /
-        model.modelParameters.axis_count) *
-      1000;
-
-    console.log(
-      "Starting the audio classifier for",
-      model.project.owner + " / " + model.project.name,
-      "(v" + model.project.deploy_version + ")"
-    );
-    console.log(
-      "Parameters",
-      "freq",
-      model.modelParameters.frequency + "Hz",
-      "window length",
-      windowLengthMs + "ms.",
-      "classes",
-      model.modelParameters.labels
-    );
-
-    // Find the right microphone to run this model with (can be passed in as argument to the script)
-    let devices = await AudioRecorder.ListDevices();
-    let device;
-    let d = devices.find((x) => x.name === process.env["MIC_NAME"]);
-    if (!d) {
-      throw new Error(
-        "Invalid microphone name (" +
-          process.argv[3] +
-          "), found: " +
-          devices.map((n) => '"' + n.name + '"').join(", ")
-      );
-    }
-    device = d.id;
-
-    let audioClassifier = new AudioClassifier(runner, false /* verbose */);
-
-    audioClassifier.on("noAudioError", async () => {
-      console.log("");
-      console.log(
-        "ERR: Did not receive any audio. Here are some potential causes:"
-      );
-      console.log("* If you are on macOS this might be a permissions issue.");
-      console.log(
-        "  Are you running this command from a simulated shell (like in Visual Studio Code)?"
-      );
-      await audioClassifier?.stop();
-      process.exit(1);
-    });
-
-    await audioClassifier.start(device);
-    // when new data comes in, this handler is called.
-    // Use it to draw conclusions, send interesting events to the cloud etc.
-    audioClassifier.on("result", async (ev, _, __) => {
-      if (!ev.result.classification) return;
-
-      // print the raw predicted values for this frame
-      // (turn into string here so the content does not jump around)
-      // tslint:disable-next-line: no-unsafe-any
-      let c = <{ [k: string]: string | number }>(<any>ev.result.classification);
-      for (let k of Object.keys(c)) {
-        c[k] = (<number>c[k]).toFixed(4);
-      }
-      if ((c["ring"] as number) > 0.95) {
-        await ringDetected();
-      }
-      if ((c["ring"] as number) > 0.5) {
-        console.log(`Rings:${rings}/${RING_THRESHOLD} Score:${c["ring"]}`);
-      }
-    });
-  } catch (ex) {
-    console.error(ex);
-    process.exit(1);
+/** ALSA device id for the sound card with the given name. */
+function findMic(name: string | undefined): string {
+  const cards = fs
+    .readFileSync("/proc/asound/cards", "utf8")
+    .split("\n")
+    .map((l) => l.trim().match(/^(\d+) .*?\]: (.+)$/))
+    .filter((m): m is RegExpMatchArray => !!m)
+    .map((m) => ({ id: `hw:${m[1]},0`, name: m[2]! }));
+  const card = cards.find((c) => c.name === name);
+  if (!card) {
+    fail(`Invalid microphone name (${name}), found: ` + cards.map((c) => `"${c.name}"`).join(", "));
   }
-})();
+  return card!.id;
+}
 
-const ringDetected = async () => {
-  rings++;
-  if (rings === 1) {
-    console.log(`Debounce started`);
-    setTimeout(() => {
-      rings = 0;
-      console.log("Debounce finished");
-    }, 1000 * 60);
-  } else if (rings === RING_THRESHOLD) {
-    try {
-      console.log("Ringing...");
-      await fetch(
-        new URL(
-          `/api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`,
-          process.env["HOMEASSISTANT_URL"]!
-        ).toString(),
-        {
-          method: "GET",
-        }
-      );
-    } catch (e) {
-      console.error(e);
-    }
+const detector = new RingDetector({
+  ...defaultRingConfig,
+  minHarmonics: num("RING_MIN_HARMONICS", defaultRingConfig.minHarmonics),
+  cooldownS: num("RING_COOLDOWN_S", defaultRingConfig.cooldownS),
+});
+
+const ring = async () => {
+  try {
+    const res = await fetch(
+      new URL(
+        `/api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`,
+        process.env["HOMEASSISTANT_URL"]!
+      ),
+      { method: "GET", signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) console.error(`Webhook failed with HTTP ${res.status}`);
+  } catch (e) {
+    console.error("Webhook failed:", e instanceof Error ? e.message : e);
   }
 };
+
+// AUDIO_CMD replaces the microphone with any command that writes raw 16 kHz
+// signed 16-bit mono PCM to stdout, for testing. The webhook is not called then.
+const testCmd = process.env["AUDIO_CMD"];
+const cmd = testCmd
+  ? ["sh", "-c", testCmd]
+  : [
+      "sox", "-t", "alsa", findMic(process.env["MIC_NAME"]), "-q",
+      "-r", String(SAMPLE_RATE), "-c", "1", "-e", "signed-integer", "-b", "16", "-t", "raw", "-",
+    ];
+
+console.log(
+  `Starting the ring detector: base pitch ${detector.cfg.f0.join("/")} Hz,`,
+  `${detector.cfg.minHarmonics} of ${detector.cfg.harmonics} multiples, cooldown ${detector.cfg.cooldownS}s`
+);
+
+const cp = spawn(cmd[0]!, cmd.slice(1), { stdio: ["ignore", "pipe", "pipe"] });
+let stderr = "";
+let odd: Buffer | null = null;
+let lastAudio = Date.now();
+let level = 0;
+
+cp.stdout.on("data", (chunk: Buffer) => {
+  lastAudio = Date.now();
+  if (odd) {
+    chunk = Buffer.concat([odd, chunk]);
+    odd = null;
+  }
+  if (chunk.length & 1) {
+    odd = chunk.subarray(chunk.length - 1);
+    chunk = chunk.subarray(0, chunk.length - 1);
+  }
+  // Copy into an aligned array: a pipe chunk may start at an odd byte offset.
+  const samples = new Int16Array(chunk.length >> 1);
+  for (let i = 0; i < samples.length; i++) {
+    samples[i] = chunk.readInt16LE(i * 2);
+    level = Math.max(level, Math.abs(samples[i]!));
+  }
+  for (const ev of detector.push(samples)) {
+    if (ev.type === "ring") {
+      console.log(`Ringing... (${ev.path})`);
+      if (!testCmd) void ring();
+    } else {
+      console.log(
+        `Ring-like sound for ${ev.ringS}s, up to ${ev.maxHarmonics} multiples,`,
+        ev.fired ? "fired" : "not fired"
+      );
+    }
+  }
+});
+cp.stderr.on("data", (d: Buffer) => (stderr = (stderr + d.toString()).slice(-2000)));
+cp.on("error", (e) => fail("Could not start audio capture:", e.message));
+cp.on("close", (code) => {
+  if (testCmd && code === 0) process.exit(0);
+  fail(`Audio capture stopped (code ${code}): ${stderr}`);
+});
+
+if (!testCmd) {
+  setInterval(() => {
+    if (Date.now() - lastAudio > 10000) fail("No audio for 10 seconds");
+  }, 2000);
+  // A flat signal means the microphone is not really delivering sound.
+  setTimeout(() => {
+    if (level < 20) fail("Microphone signal is flat");
+  }, 15000);
+}
