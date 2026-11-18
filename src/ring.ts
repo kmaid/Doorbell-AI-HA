@@ -48,8 +48,11 @@ export const defaultRingConfig: RingConfig = {
 
 export type RingEvent =
   | { type: "ring"; path: "fast" | "slow"; t: number }
-  /** A stretch of ring-like sound has ended. Logged to see near misses and what else sets it off. */
-  | { type: "activity"; t: number; ringS: number; maxHarmonics: number; fired: boolean };
+  /**
+   * A stretch of ring-like sound has ended (one second after its last ring-like frame).
+   * Used to log and save near misses and whatever else sets the detector off.
+   */
+  | { type: "activity"; t: number; startT: number; ringS: number; maxHarmonics: number; fired: boolean };
 
 interface Probe {
   /** First of the three bins searched for the peak. */
@@ -103,7 +106,7 @@ export class RingDetector {
   private side = new Float64Array(14);
   private sets: { harm: Probe[]; half: Probe[]; third: Probe[] }[];
   // current stretch of ring-like sound, for the activity log
-  private act: { frames: number; last: number; max: number; fired: boolean } | null = null;
+  private act: { start: number; frames: number; last: number; max: number; fired: boolean } | null = null;
 
   constructor(readonly cfg: RingConfig = defaultRingConfig) {
     const k = Array.from({ length: cfg.harmonics }, (_, i) => i + 1);
@@ -187,7 +190,7 @@ export class RingDetector {
     }
 
     if (isRing) {
-      this.act ??= { frames: 0, last: 0, max: 0, fired: false };
+      this.act ??= { start: t, frames: 0, last: 0, max: 0, fired: false };
       this.act.frames++;
       this.act.last = this.frames;
       this.act.max = Math.max(this.act.max, best);
@@ -195,10 +198,11 @@ export class RingDetector {
     if (this.act) {
       if (fired) this.act.fired = true;
       if (this.frames - this.act.last > 1 / FRAME_S) {
-        if (this.act.frames >= 19) // 0.3 s; shorter flickers are common and not worth a log line
+        if (this.act.frames >= 8)
           out.push({
             type: "activity",
             t,
+            startT: this.act.start,
             ringS: Math.round(this.act.frames * FRAME_S * 100) / 100,
             maxHarmonics: this.act.max,
             fired: this.act.fired,

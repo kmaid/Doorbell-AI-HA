@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 
+import { AudioHistory, ClipStore, RollingRecorder } from "./src/clips";
 import { RingDetector, SAMPLE_RATE, defaultRingConfig } from "./src/ring";
 
 const fail = (...msg: unknown[]) => {
@@ -64,6 +65,42 @@ console.log(
   `${detector.cfg.minHarmonics} of ${detector.cfg.harmonics} multiples, cooldown ${detector.cfg.cooldownS}s`
 );
 
+// With DATA_DIR set, every stretch of ring-like sound is saved with some audio
+// before and after it, fired or not, so misfires and near misses can be replayed.
+const PRE_ROLL_S = 2;
+const history = new AudioHistory(SAMPLE_RATE, 20);
+const startMs = Date.now();
+const store = process.env["DATA_DIR"]
+  ? new ClipStore(
+      `${process.env["DATA_DIR"]}/clips`,
+      num("CLIP_KEEP_DAYS", 30),
+      num("CLIP_MAX_GB", 2) * 1024 ** 3
+    )
+  : null;
+// All audio from the last while, for looking into a ring that left no trace at all.
+const rollingMinutes = num("ROLLING_MINUTES", 60);
+let rolling =
+  process.env["DATA_DIR"] && rollingMinutes > 0
+    ? new RollingRecorder(`${process.env["DATA_DIR"]}/rolling`, rollingMinutes)
+    : null;
+console.log(
+  store
+    ? `Saving clips under ${store.dir}, and the last ${rolling ? rollingMinutes : 0} minutes of audio`
+    : "Clip saving is off (DATA_DIR not set)"
+);
+if (store) {
+  const prune = () => {
+    try {
+      const n = store.prune();
+      if (n) console.log(`Removed ${n} old clip files`);
+    } catch (e) {
+      console.error("Could not prune clips:", e);
+    }
+  };
+  prune();
+  setInterval(prune, 3600000);
+}
+
 const cp = spawn(cmd[0]!, cmd.slice(1), { stdio: ["ignore", "pipe", "pipe"] });
 let stderr = "";
 let odd: Buffer | null = null;
@@ -86,14 +123,44 @@ cp.stdout.on("data", (chunk: Buffer) => {
     samples[i] = chunk.readInt16LE(i * 2);
     level = Math.max(level, Math.abs(samples[i]!));
   }
+  history.push(samples);
+  try {
+    rolling?.write(samples);
+  } catch (e) {
+    console.error("Rolling recording stopped:", e);
+    rolling = null;
+  }
   for (const ev of detector.push(samples)) {
     if (ev.type === "ring") {
       console.log(`Ringing... (${ev.path})`);
       if (!testCmd) void ring();
-    } else {
+      continue;
+    }
+    let clip = "";
+    if (store) {
+      try {
+        const pcm = history.slice(ev.startT - PRE_ROLL_S, ev.t);
+        // Stream time is counted in samples, so place the clip by counting back from now.
+        const from = ev.t - pcm.length / SAMPLE_RATE;
+        const startedAt = testCmd
+          ? startMs + from * 1000
+          : Date.now() - (history.total / SAMPLE_RATE - from) * 1000;
+        clip = store.save(pcm, SAMPLE_RATE, {
+          startedAt: new Date(startedAt).toISOString(),
+          ringS: ev.ringS,
+          maxHarmonics: ev.maxHarmonics,
+          fired: ev.fired,
+        });
+      } catch (e) {
+        console.error("Could not save clip:", e);
+      }
+    }
+    // Short flickers are common, so they are saved but not logged.
+    if (ev.ringS >= 0.3 || ev.fired) {
       console.log(
         `Ring-like sound for ${ev.ringS}s, up to ${ev.maxHarmonics} multiples,`,
-        ev.fired ? "fired" : "not fired"
+        ev.fired ? "fired" : "not fired",
+        clip ? `clip ${clip}` : ""
       );
     }
   }
