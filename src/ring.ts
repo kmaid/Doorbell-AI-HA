@@ -49,10 +49,11 @@ export const defaultRingConfig: RingConfig = {
 export type RingEvent =
   | { type: "ring"; path: "fast" | "slow"; t: number }
   /**
-   * A stretch of ring-like sound has ended (one second after its last ring-like frame).
+   * A stretch of dense ring-like sound has ended (one second after it thinned out).
    * Used to log and save near misses and whatever else sets the detector off.
+   * `peakS` is the most ring-like sound found in any `fastWindowS`; firing needs `fastOnS`.
    */
-  | { type: "activity"; t: number; startT: number; ringS: number; maxHarmonics: number; fired: boolean };
+  | { type: "activity"; t: number; startT: number; peakS: number; maxHarmonics: number; fired: boolean };
 
 interface Probe {
   /** First of the three bins searched for the peak. */
@@ -106,7 +107,8 @@ export class RingDetector {
   private side = new Float64Array(14);
   private sets: { harm: Probe[]; half: Probe[]; third: Probe[] }[];
   // current stretch of ring-like sound, for the activity log
-  private act: { start: number; frames: number; last: number; max: number; fired: boolean } | null = null;
+  private act: { start: number; peak: number; last: number; max: number; fired: boolean } | null = null;
+  private maxSeen: number[] = [];
 
   constructor(readonly cfg: RingConfig = defaultRingConfig) {
     const k = Array.from({ length: cfg.harmonics }, (_, i) => i + 1);
@@ -134,10 +136,18 @@ export class RingDetector {
     return out;
   }
 
-  /** Peak at a probe in dB above the median of the bins on either side of it. */
-  private peak(p: Probe): { db: number; pk: number } {
+  /**
+   * Peak at a probe in dB above the median of the bins on either side of it.
+   * The peak has to sit on the probe itself: a stronger bin just beside it means
+   * the energy belongs to some other pitch nearby (mains hum, for example) and is
+   * only spilling over.
+   */
+  private peak(p: Probe, centred = true): { db: number; pk: number } {
     const P = this.power;
     const pk = Math.max(P[p.lo]!, P[p.lo + 1]!, P[p.lo + 2]!);
+    if (centred && Math.max(P[p.lo - 2]!, P[p.lo - 1]!, P[p.lo + 3]!, P[p.lo + 4]!) > pk) {
+      return { db: -Infinity, pk };
+    }
     for (let i = 0; i < 7; i++) {
       this.side[i] = P[p.lo - 9 + i]!;
       this.side[7 + i] = P[p.lo + 5 + i]!;
@@ -149,7 +159,8 @@ export class RingDetector {
 
   private count(ps: Probe[]) {
     let n = 0;
-    for (const p of ps) if (this.peak(p).db >= this.cfg.peakDb) n++;
+    // Anything between the multiples counts against a ring, centred or not.
+    for (const p of ps) if (this.peak(p, false).db >= this.cfg.peakDb) n++;
     return n;
   }
 
@@ -178,7 +189,8 @@ export class RingDetector {
     const keep = Math.round(c.slowWindowS / FRAME_S);
     this.ring.push(isRing);
     this.energy.push(10 * Math.log10(bestE + 1e-20));
-    if (this.ring.length > keep) { this.ring.shift(); this.energy.shift(); }
+    this.maxSeen.push(isRing ? best : 0);
+    if (this.ring.length > keep) { this.ring.shift(); this.energy.shift(); this.maxSeen.shift(); }
     const t = (this.frames++ * HOP + N) / SAMPLE_RATE;
 
     let fired: "fast" | "slow" | null = null;
@@ -189,24 +201,29 @@ export class RingDetector {
       out.push({ type: "ring", path: fired, t });
     }
 
-    if (isRing) {
-      this.act ??= { start: t, frames: 0, last: 0, max: 0, fired: false };
-      this.act.frames++;
+    // Activity: at least a fifth of a second of ring-like frames within the fast window.
+    const w = Math.round(c.fastWindowS / FRAME_S);
+    let on = 0, top = 0;
+    for (let i = Math.max(0, this.ring.length - w); i < this.ring.length; i++) {
+      if (this.ring[i]) { on++; top = Math.max(top, this.maxSeen[i]!); }
+    }
+    if (on >= Math.round(0.2 / FRAME_S)) {
+      this.act ??= { start: t - on * FRAME_S, peak: 0, last: 0, max: 0, fired: false };
+      this.act.peak = Math.max(this.act.peak, on);
       this.act.last = this.frames;
-      this.act.max = Math.max(this.act.max, best);
+      this.act.max = Math.max(this.act.max, top);
     }
     if (this.act) {
       if (fired) this.act.fired = true;
       if (this.frames - this.act.last > 1 / FRAME_S) {
-        if (this.act.frames >= 8)
-          out.push({
-            type: "activity",
-            t,
-            startT: this.act.start,
-            ringS: Math.round(this.act.frames * FRAME_S * 100) / 100,
-            maxHarmonics: this.act.max,
-            fired: this.act.fired,
-          });
+        out.push({
+          type: "activity",
+          t,
+          startT: this.act.start,
+          peakS: Math.round(this.act.peak * FRAME_S * 100) / 100,
+          maxHarmonics: this.act.max,
+          fired: this.act.fired,
+        });
         this.act = null;
       }
     }

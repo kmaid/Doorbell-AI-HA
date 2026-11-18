@@ -19,7 +19,7 @@ test("clips are written as wav with details, and pruned by age and size", () => 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clips-"));
   const store = new ClipStore(dir, 30, 1e9);
   const pcm = Int16Array.from({ length: 16000 }, (_, i) => (i % 200) - 100);
-  const info = { ringS: 3.3, maxHarmonics: 10 };
+  const info = { peakS: 0.9, maxHarmonics: 10 };
   const a = store.save(pcm, 16000, { ...info, startedAt: "2026-01-01T10:00:00.000Z", fired: true });
   const b = store.save(pcm, 16000, { ...info, startedAt: "2026-02-20T10:00:00.000Z", fired: false });
   expect(a).toBe("20260101T100000Z-fired");

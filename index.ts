@@ -147,7 +147,7 @@ cp.stdout.on("data", (chunk: Buffer) => {
           : Date.now() - (history.total / SAMPLE_RATE - from) * 1000;
         clip = store.save(pcm, SAMPLE_RATE, {
           startedAt: new Date(startedAt).toISOString(),
-          ringS: ev.ringS,
+          peakS: ev.peakS,
           maxHarmonics: ev.maxHarmonics,
           fired: ev.fired,
         });
@@ -155,14 +155,12 @@ cp.stdout.on("data", (chunk: Buffer) => {
         console.error("Could not save clip:", e);
       }
     }
-    // Short flickers are common, so they are saved but not logged.
-    if (ev.ringS >= 0.3 || ev.fired) {
-      console.log(
-        `Ring-like sound for ${ev.ringS}s, up to ${ev.maxHarmonics} multiples,`,
-        ev.fired ? "fired" : "not fired",
-        clip ? `clip ${clip}` : ""
-      );
-    }
+    console.log(
+      `Ring-like sound: ${ev.peakS}s within ${detector.cfg.fastWindowS}s (fires at ${detector.cfg.fastOnS}s),`,
+      `up to ${ev.maxHarmonics} multiples,`,
+      ev.fired ? "fired" : "not fired",
+      clip ? `clip ${clip}` : ""
+    );
   }
 });
 cp.stderr.on("data", (d: Buffer) => (stderr = (stderr + d.toString()).slice(-2000)));

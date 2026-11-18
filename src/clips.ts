@@ -4,8 +4,8 @@ import path from "node:path";
 export interface ClipInfo {
   startedAt: string;
   durationS: number;
-  /** Seconds of ring-like sound in the clip. */
-  ringS: number;
+  /** Most ring-like sound within the detector's fast window, in seconds. */
+  peakS: number;
   maxHarmonics: number;
   fired: boolean;
 }
