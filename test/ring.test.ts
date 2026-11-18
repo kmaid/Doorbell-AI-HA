@@ -92,7 +92,7 @@ test("noise, single tones and other notes do not fire", () => {
 
 test("a short note at the ring's pitch does not fire", () => {
   const x = new Float32Array(10 * SR).map(() => 0.002 * rand());
-  x.set(note(391, 1.2), 2 * SR);
+  x.set(note(391, 0.6), 2 * SR);
   expect(run(x).length).toBe(0);
 });
 

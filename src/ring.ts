@@ -27,7 +27,12 @@ export interface RingConfig {
   fastWindowS: number;
   /** Depth in dB of the gap between bursts. */
   dipDb: number;
-  /** Slow path, for rings half buried in noise where the gap is not visible. */
+  /**
+   * Slow path, for rings half buried in noise or heard from another room, where
+   * frames drop out and the gap is not visible. Set from phone playback in other
+   * rooms with noise (0.87 s to 1.9 s of ring-like frames within the window)
+   * against everything else recorded in the hallway (0.21 s at most).
+   */
   slowOnS: number;
   slowWindowS: number;
   cooldownS: number;
@@ -41,7 +46,7 @@ export const defaultRingConfig: RingConfig = {
   fastOnS: 0.5,
   fastWindowS: 0.9,
   dipDb: 8,
-  slowOnS: 1.6,
+  slowOnS: 0.8,
   slowWindowS: 2.2,
   cooldownS: 30,
 };
