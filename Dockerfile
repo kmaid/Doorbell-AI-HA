@@ -4,16 +4,9 @@ RUN apt-get update && apt-get install -y \
     sox \
     libsox-fmt-all \
     alsa-utils \
-    libvips-dev \
-    python3 \
-    make \
-    g++ \
-    pkg-config
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /App
-
-COPY package.json bun.lockb ./
-RUN bun install
 
 COPY . .
 

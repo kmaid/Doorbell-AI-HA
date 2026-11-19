@@ -5,17 +5,15 @@ export interface ClipInfo {
   startedAt: string;
   durationS: number;
   /** Which detector the clip was saved for. */
-  by: "matcher" | "model" | "washer";
+  by: "matcher" | "washer";
   /** Washer: "finished", "pair" (one pair that counts) or "near" (one that fell short). Names the file when set. */
   kind?: string;
-  /** Whether that detector reached the point of ringing (it may be the one that only logs). */
+  /** Whether it rang the intercom webhook, or for the washer, whether the machine was judged finished. */
   fired: boolean;
   /** Matcher: best score, the window it was scored over, and its distance from firing. */
   score?: number;
   windowS?: number;
   margin?: number;
-  /** Model: highest ring score and the number of results above 0.95. */
-  results?: number;
   /** Washer: the tone's strength, pitch and steadiness; for "finished", both pairs and the time between them. */
   levelDb?: number;
   pitchHz?: number;
@@ -81,7 +79,7 @@ export class AudioHistory {
 }
 
 /**
- * Clips live in <dir>/YYYY-MM-DD/<time>-<matcher|model>-<fired|near>.wav, or
+ * Clips live in <dir>/YYYY-MM-DD/<time>-matcher-<fired|near>.wav, or
  * <time>-washer-<finished|pair|near>.wav, with a .json beside each.
  * Old clips are removed by age, then oldest first while over the size limit.
  */

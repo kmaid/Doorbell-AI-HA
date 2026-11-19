@@ -3,8 +3,6 @@ import fs from "node:fs";
 
 import { AudioHistory, ClipStore, RollingRecorder, type ClipInfo } from "./src/clips";
 import { RingMatcher, SAMPLE_RATE, defaultMatcherConfig } from "./src/matcher";
-import { MODEL_RATE, ModelRule, RingModel } from "./src/model";
-import { Halver } from "./src/resample";
 import { WasherListener, type WasherPair } from "./src/washer";
 
 const fail = (...msg: unknown[]) => {
@@ -32,23 +30,14 @@ function findMic(name: string | undefined): string {
   return card!.id;
 }
 
-// Two detectors listen to the same microphone: the three-note matcher and the
-// Edge Impulse model that served until 2026-11-18. RING_BY names the one that
-// calls Home Assistant. The other only writes to the log what it would have done.
-const ringBy = process.env["RING_BY"] ?? "model";
-if (ringBy !== "model" && ringBy !== "matcher") fail(`RING_BY must be "model" or "matcher", not "${ringBy}"`);
-
 // AUDIO_CMD replaces the microphone with any command that writes raw signed 16-bit
-// mono PCM to stdout, for testing. The webhook is not called then. AUDIO_RATE says
-// what rate it writes: 32000 like the microphone, or 16000, which leaves the model out.
+// mono PCM at 16 kHz to stdout, for testing. The webhooks are not called then.
 const testCmd = process.env["AUDIO_CMD"];
-const rate = num("AUDIO_RATE", MODEL_RATE);
-if (rate !== MODEL_RATE && rate !== SAMPLE_RATE) fail("AUDIO_RATE must be 32000 or 16000");
 const cmd = testCmd
   ? ["sh", "-c", testCmd]
   : [
       "sox", "-t", "alsa", findMic(process.env["MIC_NAME"]), "-q",
-      "-r", String(rate), "-c", "1", "-e", "signed-integer", "-b", "16", "-t", "raw", "-",
+      "-r", String(SAMPLE_RATE), "-c", "1", "-e", "signed-integer", "-b", "16", "-t", "raw", "-",
     ];
 
 const webhook = async (id: string | undefined) => {
@@ -71,7 +60,7 @@ const matcher = new RingMatcher({
   cooldownS: num("RING_COOLDOWN_S", defaultMatcherConfig.cooldownS),
 });
 
-// With DATA_DIR set, every stretch of sound that either detector reacts to is saved
+// With DATA_DIR set, every stretch of sound that the matcher or the washer listener reacts to is saved
 // with some audio before and after it, fired or not, so misfires and near misses can
 // be replayed.
 const PRE_ROLL_S = 2;
@@ -108,51 +97,6 @@ function saveClip(fromS: number, toS: number, info: Omit<ClipInfo, "startedAt" |
     return "";
   }
 }
-
-// ---- the model ---------------------------------------------------------------------
-
-const rule = new ModelRule();
-// current stretch of sound the model reacts to (scores above 0.5), for the log and the clips
-let modelAct: { start: number; last: number; peak: number; results: number; fired: boolean } | null = null;
-
-function onModelScore(score: number, t: number) {
-  if (score > 0.5) {
-    modelAct ??= { start: t - 2, last: t, peak: 0, results: 0, fired: false };
-    modelAct.last = t;
-    modelAct.peak = Math.max(modelAct.peak, score);
-    if (score > rule.score) modelAct.results++;
-  }
-  if (rule.feed(score, t)) {
-    if (modelAct) modelAct.fired = true;
-    console.log(ringBy === "model" ? "Ringing... (model)" : "Model would ring");
-    if (ringBy === "model") void ring();
-  }
-  if (score > 0.5) console.log(`Model score ${score.toFixed(2)} (${rule.count}/${rule.needed})`);
-  if (modelAct && t - modelAct.last >= 1.5) {
-    const a = modelAct;
-    modelAct = null;
-    const clip = saveClip(a.start, t, { by: "model", fired: a.fired, score: a.peak, results: a.results });
-    console.log(
-      `Model heard ring-like sound: best score ${a.peak.toFixed(2)}, ${a.results} results above ${rule.score},`,
-      a.fired ? "fired" : "not fired",
-      clip
-    );
-  }
-}
-
-let model: RingModel | null = null;
-if (rate === MODEL_RATE) {
-  model = new RingModel(onModelScore, (e) => fail("The model stopped:", e));
-  try {
-    await model.init();
-  } catch (e) {
-    // The matcher can carry on alone, but not if the model is the one meant to ring.
-    if (ringBy === "model") fail("Could not start the model:", e);
-    console.error("Could not start the model, carrying on with the matcher only:", e);
-    model = null;
-  }
-}
-if (!model && ringBy === "model") fail("The model needs 32 kHz audio, so it cannot be the one that rings here");
 
 // ---- the washing machine -----------------------------------------------------------
 
@@ -200,7 +144,7 @@ function onWasherAudio(samples: Int16Array) {
 
 // ---- the matcher -------------------------------------------------------------------
 
-function onMatcherAudio(samples: Int16Array) {
+function onAudio(samples: Int16Array) {
   history.push(samples);
   try {
     rolling?.write(samples);
@@ -212,8 +156,8 @@ function onMatcherAudio(samples: Int16Array) {
   for (const ev of matcher.push(samples)) {
     if (ev.type === "ring") {
       const detail = `${ev.windowS.toFixed(2)} s window, score ${ev.score.toFixed(2)}, fires at ${ev.threshold.toFixed(2)}, ${ev.partials} of 11 partials`;
-      console.log(ringBy === "matcher" ? `Ringing... (matcher: ${detail})` : `Matcher would ring (${detail})`);
-      if (ringBy === "matcher") void ring();
+      console.log(`Ringing... (${detail})`);
+      void ring();
       continue;
     }
     const clip = saveClip(ev.startT, ev.t, { by: "matcher", fired: ev.fired, score: ev.score, windowS: ev.windowS, margin: ev.margin });
@@ -227,9 +171,7 @@ function onMatcherAudio(samples: Int16Array) {
 }
 
 console.log(
-  `Starting the ring detector: rings by the ${ringBy},`,
-  model ? "model and matcher both listening," : "matcher only (no model at 16 kHz),",
-  `matcher fires ${matcher.cfg.margin} above its ceilings, cooldown ${matcher.cfg.cooldownS}s`
+  `Starting the ring detector: fires ${matcher.cfg.margin} above its ceilings, cooldown ${matcher.cfg.cooldownS}s`
 );
 console.log(
   "Listening for the washing machine's finish beep,",
@@ -256,7 +198,6 @@ if (store) {
 // ---- audio -------------------------------------------------------------------------
 
 const cp = spawn(cmd[0]!, cmd.slice(1), { stdio: ["ignore", "pipe", "pipe"] });
-const halver = new Halver();
 let stderr = "";
 let odd: Buffer | null = null;
 let lastAudio = Date.now();
@@ -278,21 +219,12 @@ cp.stdout.on("data", (chunk: Buffer) => {
     samples[i] = chunk.readInt16LE(i * 2);
     level = Math.max(level, Math.abs(samples[i]!));
   }
-  model?.push(samples);
-  onMatcherAudio(rate === SAMPLE_RATE ? samples : halver.push(samples));
-  // A file arrives much faster than the model can score it: hold the stream until it has caught up.
-  if (model && model.backlog > 4) {
-    cp.stdout.pause();
-    void model.idle().then(() => cp.stdout.resume());
-  }
+  onAudio(samples);
 });
 cp.stderr.on("data", (d: Buffer) => (stderr = (stderr + d.toString()).slice(-2000)));
 cp.on("error", (e) => fail("Could not start audio capture:", e.message));
-cp.on("close", async (code) => {
-  if (testCmd && code === 0) {
-    await model?.stop();
-    process.exit(0);
-  }
+cp.on("close", (code) => {
+  if (testCmd && code === 0) process.exit(0);
   fail(`Audio capture stopped (code ${code}): ${stderr}`);
 });
 
