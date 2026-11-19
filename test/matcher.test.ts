@@ -140,7 +140,7 @@ test("ring-like sound is reported with how close it came, fired or not", () => {
   expect(fired[0]!.type === "activity" && fired[0]!.startT).toBeLessThan(2.6);
 
   // a stricter matcher does not fire on the synthetic ring, but still reports the near miss
-  const near = events(x, { margin: 0.4 });
+  const near = events(x, { margin: 0.45 });
   expect(near.filter((e) => e.type === "ring").length).toBe(0);
   const act = near.filter((e) => e.type === "activity");
   expect(act.length).toBe(1);

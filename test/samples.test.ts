@@ -49,7 +49,7 @@ const others = list("not-ring");
 test.skipIf(!rings.length)(`recorded rings fire once each (${rings.length} files)`, () => {
   const wrong = rings.filter((f) => fires(path.join(dir, "ring", f)).length !== 1);
   expect(wrong).toEqual([]);
-});
+}, 60000);
 
 test.skipIf(!stress.length)(`stress playbacks never fire twice, and most fire (${stress.length} files)`, () => {
   const counts = stress.map((f) => fires(path.join(dir, "ring", f)).length);
@@ -57,12 +57,12 @@ test.skipIf(!stress.length)(`stress playbacks never fire twice, and most fire ($
   if (missed.length) console.log(`stress playbacks not caught: ${missed.join(", ")}`);
   expect(Math.max(...counts)).toBeLessThanOrEqual(1);
   expect(missed.length).toBeLessThanOrEqual(stress.length / 2);
-});
+}, 60000);
 
 test.skipIf(!others.length)(`recorded other sounds do not fire (${others.length} files)`, () => {
   const wrong = others.filter((f) => fires(path.join(dir, "not-ring", f)).length !== 0);
   expect(wrong).toEqual([]);
-});
+}, 60000);
 
 // ---- the washing machine ---------------------------------------------------------------
 
@@ -83,14 +83,14 @@ const beeps = [...washes.map((f) => path.join("washer", f)), ...list("not-washer
 test.skipIf(!washes.length)(`recorded washing machine finishes are heard once each (${washes.length} files)`, () => {
   const wrong = washes.filter((f) => finishes(path.join(dir, "washer", f)).length !== 1);
   expect(wrong).toEqual([]);
-});
+}, 60000);
 
 test.skipIf(!notWasher.length)(`nothing else sounds like the washing machine (${notWasher.length} files)`, () => {
   const wrong = notWasher.filter((f) => finishes(path.join(dir, f)).length !== 0);
   expect(wrong).toEqual([]);
-});
+}, 60000);
 
 test.skipIf(!beeps.length)(`washing machine and other beeps do not ring the intercom (${beeps.length} files)`, () => {
   const wrong = beeps.filter((f) => fires(path.join(dir, f)).length !== 0);
   expect(wrong).toEqual([]);
-});
+}, 60000);

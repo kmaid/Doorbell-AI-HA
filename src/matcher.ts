@@ -5,7 +5,7 @@
  * a middle note (469 Hz) beside it, the high note again and louder, then silence.
  * Every partial of those notes sits on a 78.125 Hz grid, and each one rises and
  * falls through the cycle in its own way. TEMPLATE below is that course for eleven
- * partials, measured from 8 real rings.
+ * partials, measured from real rings.
  *
  * For each partial the matcher asks how well its strength over the last while
  * follows its line of the template, as a correlation. That makes every partial
@@ -38,27 +38,34 @@ const C = PARTIALS.length;
 
 /**
  * How far each partial stands above the spectrum beside it, in dB, at each step
- * of the cycle. Median of 44 cycles from 8 rings recorded on 2026-11-18. Step 0
- * is where the first high note starts.
+ * of the cycle. Step 0 is where the first high note starts.
+ *
+ * What the microphone hears of the ring changes when the microphone moves: after
+ * it had been lifted and put back on 2026-11-19, some partials arrived 6 to 20 dB
+ * weaker and several followed a different course through the cycle. This is the
+ * average of the two states seen so far, weighted equally: the median of 44 cycles
+ * from 8 rings on 2026-11-18 and the mean of 2 rings on 2026-11-19. Rings of either
+ * day score 0.8 to 0.9 against it, where each scored 0.95 against its own day's
+ * course and 0.6 against the other's.
  */
 // prettier-ignore
 const TEMPLATE = [
-  [10, 3, 23, 9, 19, 11, 25, 12, 14, 13, 14], [9, 1, 27, 15, 21, 18, 28, 16, 15, 16, 15],
-  [13, 1, 30, 19, 23, 24, 30, 19, 18, 18, 16], [19, 8, 31, 22, 27, 28, 32, 21, 20, 20, 16],
-  [23, 14, 31, 24, 29, 30, 33, 22, 21, 21, 16], [24, 17, 31, 23, 28, 31, 34, 22, 22, 22, 16],
-  [23, 17, 28, 19, 25, 31, 33, 22, 20, 22, 14], [21, 16, 25, 11, 22, 28, 31, 21, 15, 21, 9],
-  [20, 15, 21, 6, 21, 27, 28, 21, 8, 21, 4], [20, 16, 19, 15, 22, 26, 25, 23, 12, 19, 2],
-  [23, 17, 19, 20, 23, 27, 24, 26, 18, 18, 4], [26, 19, 20, 25, 25, 26, 26, 27, 22, 17, 8],
-  [28, 20, 21, 29, 26, 26, 28, 28, 23, 16, 10], [28, 19, 20, 29, 25, 26, 28, 27, 24, 15, 12],
-  [28, 17, 19, 28, 23, 25, 27, 24, 22, 12, 15], [28, 13, 21, 27, 20, 22, 28, 19, 19, 8, 19],
-  [28, 9, 24, 26, 20, 20, 31, 12, 14, 6, 23], [28, 7, 29, 25, 23, 18, 35, 13, 6, 5, 26],
-  [26, 7, 32, 24, 25, 15, 39, 19, 13, 5, 30], [23, 6, 34, 26, 29, 18, 40, 23, 20, 8, 33],
-  [19, 5, 36, 27, 31, 24, 40, 23, 24, 12, 35], [17, 4, 35, 25, 30, 28, 40, 23, 27, 16, 35],
-  [17, 3, 30, 21, 25, 27, 40, 19, 25, 18, 30], [16, 3, 26, 18, 20, 24, 37, 14, 21, 17, 25],
-  [16, 4, 21, 15, 15, 22, 33, 9, 18, 17, 20], [16, 3, 14, 14, 10, 20, 30, 2, 15, 18, 18],
-  [16, 2, 9, 14, 5, 16, 25, 6, 13, 18, 20], [14, 1, 13, 15, 6, 8, 23, 6, 13, 18, 21],
-  [11, 1, 12, 15, 7, 6, 25, 3, 13, 18, 19], [7, 1, 7, 14, 8, 9, 23, 6, 6, 14, 17],
-  [6, 2, 7, 9, 12, 5, 23, 7, 10, 6, 14], [9, 2, 17, 4, 15, 5, 23, 8, 12, 10, 14],
+  [8, 3, 23, 10, 16, 14, 18, 9, 15, 14, 14], [9, 2, 27, 14, 19, 19, 19, 12, 17, 16, 16],
+  [13, 1, 30, 16, 21, 23, 19, 14, 20, 18, 17], [18, 4, 31, 18, 25, 26, 22, 17, 22, 20, 18],
+  [21, 7, 32, 19, 27, 29, 24, 20, 24, 21, 18], [21, 10, 31, 17, 26, 30, 27, 21, 24, 21, 19],
+  [20, 10, 28, 12, 23, 29, 27, 20, 23, 21, 17], [18, 10, 25, 8, 19, 26, 25, 18, 18, 20, 12],
+  [17, 10, 21, 7, 17, 24, 23, 18, 13, 19, 7], [18, 10, 19, 14, 15, 23, 22, 19, 12, 18, 5],
+  [21, 9, 19, 19, 14, 23, 20, 21, 12, 17, 7], [22, 10, 20, 23, 18, 23, 20, 23, 15, 17, 9],
+  [24, 11, 20, 26, 19, 23, 20, 24, 17, 17, 10], [24, 11, 20, 27, 19, 23, 18, 24, 18, 16, 11],
+  [24, 11, 20, 26, 17, 23, 18, 21, 17, 14, 11], [24, 9, 21, 24, 15, 20, 20, 16, 14, 11, 16],
+  [24, 7, 25, 23, 16, 20, 23, 12, 11, 10, 21], [23, 6, 29, 21, 19, 18, 25, 10, 7, 8, 24],
+  [21, 4, 31, 20, 21, 17, 28, 14, 12, 8, 28], [18, 3, 33, 20, 23, 18, 30, 18, 17, 10, 30],
+  [13, 3, 34, 18, 25, 21, 30, 18, 20, 13, 32], [12, 3, 33, 17, 24, 23, 30, 17, 22, 15, 33],
+  [13, 3, 30, 15, 20, 21, 26, 12, 20, 16, 29], [12, 3, 26, 13, 15, 17, 26, 8, 16, 13, 24],
+  [13, 3, 21, 12, 11, 14, 25, 5, 14, 11, 21], [13, 3, 13, 11, 6, 12, 25, 2, 12, 11, 18],
+  [14, 2, 14, 11, 4, 10, 23, 5, 11, 12, 17], [12, 1, 17, 11, 6, 6, 23, 6, 11, 13, 19],
+  [10, 1, 17, 11, 8, 5, 26, 5, 12, 12, 19], [8, 2, 13, 11, 8, 6, 25, 4, 8, 9, 19],
+  [7, 2, 11, 9, 11, 6, 22, 4, 11, 7, 15], [7, 3, 18, 6, 13, 9, 19, 6, 13, 11, 13],
 ];
 
 export interface MatcherWindow {
@@ -73,7 +80,7 @@ export interface MatcherConfig {
   windows: MatcherWindow[];
   /**
    * A window fires when its score is this far above its ceiling. Real rings at the
-   * hallway microphone score about 0.9 in every window. Larger is stricter; smaller
+   * hallway microphone score 0.8 to 0.9 in every window. Larger is stricter; smaller
    * finds more rings under heavy noise and gets closer to what music can reach.
    */
   margin: number;
@@ -84,12 +91,12 @@ export interface MatcherConfig {
 
 export const defaultMatcherConfig: MatcherConfig = {
   windows: [
-    { frames: 33, ceiling: 0.53 }, // 1 cycle, 0.53 s
-    { frames: 49, ceiling: 0.47 }, // 1.5 cycles, 0.78 s
-    { frames: 66, ceiling: 0.39 }, // 2 cycles, 1.06 s
-    { frames: 98, ceiling: 0.34 }, // 3 cycles, 1.57 s
-    { frames: 131, ceiling: 0.29 }, // 4 cycles, 2.10 s
-    { frames: 164, ceiling: 0.27 }, // 5 cycles, 2.62 s
+    { frames: 33, ceiling: 0.56 }, // 1 cycle, 0.53 s
+    { frames: 49, ceiling: 0.45 }, // 1.5 cycles, 0.78 s
+    { frames: 66, ceiling: 0.40 }, // 2 cycles, 1.06 s
+    { frames: 98, ceiling: 0.32 }, // 3 cycles, 1.57 s
+    { frames: 131, ceiling: 0.31 }, // 4 cycles, 2.10 s
+    { frames: 164, ceiling: 0.26 }, // 5 cycles, 2.62 s
   ],
   margin: 0.1,
   nearMargin: 0.1,
