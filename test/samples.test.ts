@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { readWav } from "../src/clips";
 import { RingMatcher, SAMPLE_RATE } from "../src/matcher";
+import { WasherListener } from "../src/washer";
 
 /**
  * Replays real recordings through the matcher. The recordings are private and
@@ -12,6 +13,12 @@ import { RingMatcher, SAMPLE_RATE } from "../src/matcher";
  *
  *   $RING_SAMPLES_DIR/ring/*.wav       each must fire exactly once
  *   $RING_SAMPLES_DIR/not-ring/*.wav   none may fire
+ *
+ *   $RING_SAMPLES_DIR/washer/*.wav     the washing machine finishing: each must be heard once
+ *   $RING_SAMPLES_DIR/not-washer/*.wav other beeps: the washer listener must stay silent
+ *
+ * The washer listener must also stay silent on everything in ring/ and not-ring/, and
+ * the matcher on everything in washer/ and not-washer/.
  *
  * Files are 16 kHz 16-bit mono wav, which is what the listener saves. To turn a
  * misfire or a miss into a permanent test, copy its clip into the right folder.
@@ -54,5 +61,36 @@ test.skipIf(!stress.length)(`stress playbacks never fire twice, and most fire ($
 
 test.skipIf(!others.length)(`recorded other sounds do not fire (${others.length} files)`, () => {
   const wrong = others.filter((f) => fires(path.join(dir, "not-ring", f)).length !== 0);
+  expect(wrong).toEqual([]);
+});
+
+// ---- the washing machine ---------------------------------------------------------------
+
+function finishes(file: string) {
+  const { pcm, sampleRate } = readWav(file);
+  if (sampleRate !== SAMPLE_RATE) throw new Error(`${file}: ${sampleRate} Hz, expected ${SAMPLE_RATE}`);
+  return new WasherListener().push(pcm).filter((e) => e.type === "finished");
+}
+
+const washes = list("washer");
+const notWasher = [
+  ...list("not-washer").map((f) => path.join("not-washer", f)),
+  ...all.map((f) => path.join("ring", f)),
+  ...others.map((f) => path.join("not-ring", f)),
+];
+const beeps = [...washes.map((f) => path.join("washer", f)), ...list("not-washer").map((f) => path.join("not-washer", f))];
+
+test.skipIf(!washes.length)(`recorded washing machine finishes are heard once each (${washes.length} files)`, () => {
+  const wrong = washes.filter((f) => finishes(path.join(dir, "washer", f)).length !== 1);
+  expect(wrong).toEqual([]);
+});
+
+test.skipIf(!notWasher.length)(`nothing else sounds like the washing machine (${notWasher.length} files)`, () => {
+  const wrong = notWasher.filter((f) => finishes(path.join(dir, f)).length !== 0);
+  expect(wrong).toEqual([]);
+});
+
+test.skipIf(!beeps.length)(`washing machine and other beeps do not ring the intercom (${beeps.length} files)`, () => {
+  const wrong = beeps.filter((f) => fires(path.join(dir, f)).length !== 0);
   expect(wrong).toEqual([]);
 });

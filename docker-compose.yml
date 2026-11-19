@@ -19,6 +19,8 @@ services:
       - RING_BY=${RING_BY:-model}
       # how far above its ceilings the matcher must score to fire; empty for the default
       - RING_MARGIN=${RING_MARGIN:-}
+      # webhook for the washing machine's finish beep; empty means it is only logged
+      - HOMEASSISTANT_WASHER_WEBHOOK_ID=${HOMEASSISTANT_WASHER_WEBHOOK_ID:-}
       - DATA_DIR=/data
     volumes:
       - clips:/data

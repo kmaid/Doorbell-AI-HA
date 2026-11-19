@@ -5,6 +5,7 @@ import { AudioHistory, ClipStore, RollingRecorder, type ClipInfo } from "./src/c
 import { RingMatcher, SAMPLE_RATE, defaultMatcherConfig } from "./src/matcher";
 import { MODEL_RATE, ModelRule, RingModel } from "./src/model";
 import { Halver } from "./src/resample";
+import { WasherListener, type WasherPair } from "./src/washer";
 
 const fail = (...msg: unknown[]) => {
   console.error(...msg);
@@ -50,21 +51,19 @@ const cmd = testCmd
       "-r", String(rate), "-c", "1", "-e", "signed-integer", "-b", "16", "-t", "raw", "-",
     ];
 
-const ring = async () => {
+const webhook = async (id: string | undefined) => {
   if (testCmd) return;
   try {
-    const res = await fetch(
-      new URL(
-        `/api/webhook/${process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]}`,
-        process.env["HOMEASSISTANT_URL"]!
-      ),
-      { method: "GET", signal: AbortSignal.timeout(10000) }
-    );
+    const res = await fetch(new URL(`/api/webhook/${id}`, process.env["HOMEASSISTANT_URL"]!), {
+      method: "GET",
+      signal: AbortSignal.timeout(10000),
+    });
     if (!res.ok) console.error(`Webhook failed with HTTP ${res.status}`);
   } catch (e) {
     console.error("Webhook failed:", e instanceof Error ? e.message : e);
   }
 };
+const ring = () => webhook(process.env["HOMEASSISTANT_INTERCOM_RING_WEBHOOK_ID"]);
 
 const matcher = new RingMatcher({
   ...defaultMatcherConfig,
@@ -76,7 +75,8 @@ const matcher = new RingMatcher({
 // with some audio before and after it, fired or not, so misfires and near misses can
 // be replayed.
 const PRE_ROLL_S = 2;
-const history = new AudioHistory(SAMPLE_RATE, 30);
+// long enough for two pairs of washer beeps three periods apart
+const history = new AudioHistory(SAMPLE_RATE, 60);
 const startMs = Date.now();
 const store = process.env["DATA_DIR"]
   ? new ClipStore(
@@ -154,6 +154,50 @@ if (rate === MODEL_RATE) {
 }
 if (!model && ringBy === "model") fail("The model needs 32 kHz audio, so it cannot be the one that rings here");
 
+// ---- the washing machine -----------------------------------------------------------
+
+// Listens for the washing machine's "finished" beep on the same audio. Without
+// HOMEASSISTANT_WASHER_WEBHOOK_ID it only writes to the log and saves clips.
+const washer = new WasherListener();
+const washerWebhook = process.env["HOMEASSISTANT_WASHER_WEBHOOK_ID"];
+const pairText = (p: WasherPair) =>
+  `score ${p.score.toFixed(2)}, ${p.levelDb.toFixed(0)} dB above the sound beside it, ${p.pitchHz.toFixed(1)} Hz, pitch steady to ${p.wobbleHz.toFixed(1)} Hz`;
+const pairInfo = (p: WasherPair) => ({
+  score: Math.round(p.score * 1000) / 1000,
+  levelDb: Math.round(p.levelDb * 10) / 10,
+  pitchHz: Math.round(p.pitchHz * 100) / 100,
+  wobbleHz: Math.round(p.wobbleHz * 100) / 100,
+});
+
+function onWasherAudio(samples: Int16Array) {
+  for (const ev of washer.push(samples)) {
+    if (ev.type === "pair") {
+      const kind = ev.accepted ? "pair" : "near";
+      const clip = saveClip(ev.startT, ev.t, { by: "washer", kind, fired: false, ...pairInfo(ev) });
+      console.log(
+        ev.accepted ? "Washer beep pair heard:" : "Washer-like beeps, not counted:",
+        `${pairText(ev)},`,
+        clip
+      );
+      continue;
+    }
+    const gapS = ev.second.startT - ev.first.startT;
+    const clip = saveClip(ev.first.startT, ev.t, {
+      by: "washer",
+      kind: "finished",
+      fired: true,
+      gapS: Math.round(gapS * 100) / 100,
+      pairs: [pairInfo(ev.first), pairInfo(ev.second)],
+    });
+    console.log(
+      washerWebhook ? "Washing machine finished..." : "Washing machine finished (not sent, no webhook set):",
+      `two beep pairs ${gapS.toFixed(2)} s apart, scores ${ev.first.score.toFixed(2)} and ${ev.second.score.toFixed(2)}, ${ev.second.pitchHz.toFixed(1)} Hz,`,
+      clip
+    );
+    if (washerWebhook) void webhook(washerWebhook);
+  }
+}
+
 // ---- the matcher -------------------------------------------------------------------
 
 function onMatcherAudio(samples: Int16Array) {
@@ -164,6 +208,7 @@ function onMatcherAudio(samples: Int16Array) {
     console.error("Rolling recording stopped:", e);
     rolling = null;
   }
+  onWasherAudio(samples);
   for (const ev of matcher.push(samples)) {
     if (ev.type === "ring") {
       const detail = `${ev.windowS.toFixed(2)} s window, score ${ev.score.toFixed(2)}, fires at ${ev.threshold.toFixed(2)}, ${ev.partials} of 11 partials`;
@@ -185,6 +230,10 @@ console.log(
   `Starting the ring detector: rings by the ${ringBy},`,
   model ? "model and matcher both listening," : "matcher only (no model at 16 kHz),",
   `matcher fires ${matcher.cfg.margin} above its ceilings, cooldown ${matcher.cfg.cooldownS}s`
+);
+console.log(
+  "Listening for the washing machine's finish beep,",
+  washerWebhook ? "which is sent to Home Assistant" : "log only (HOMEASSISTANT_WASHER_WEBHOOK_ID not set)"
 );
 console.log(
   store
