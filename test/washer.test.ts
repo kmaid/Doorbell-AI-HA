@@ -169,3 +169,31 @@ test("after finishing it stays quiet for the cooldown, then finishes again", () 
   expect(finished(x).length).toBe(1);
   expect(finished(x, { cooldownS: 100 }).length).toBe(2);
 });
+
+test("a clear pair and a weak one a period apart finish, two weak ones do not", () => {
+  // a weak pair: the first beep half covered by a burst of noise
+  const weakPair = (x: Float32Array, at: number) => {
+    pair(x, at);
+    const burst = hiss(0.3, 0.6, 7);
+    for (let i = 0; i < burst.length; i++) x[Math.round((at + 0.1) * SR) + i]! += burst[i]!;
+  };
+  const one = hiss(30);
+  weakPair(one, 5);
+  const p = events(one, { nearScore: 0 }).filter((e) => e.type === "pair");
+  expect(p.map((e) => e.type === "pair" && [e.accepted, e.weak])).toEqual([[false, true]]);
+
+  const mixed = hiss(60);
+  pair(mixed, 5);
+  weakPair(mixed, 5 + PAIR_PERIOD_S);
+  expect(finished(mixed).length).toBe(1);
+
+  const offBeat = hiss(60);
+  pair(offBeat, 5);
+  weakPair(offBeat, 5 + PAIR_PERIOD_S + 0.3);
+  expect(finished(offBeat).length).toBe(0);
+
+  const bothWeak = hiss(60);
+  weakPair(bothWeak, 5);
+  weakPair(bothWeak, 5 + PAIR_PERIOD_S);
+  expect(finished(bothWeak).length).toBe(0);
+});

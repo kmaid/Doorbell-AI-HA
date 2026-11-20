@@ -15,6 +15,11 @@
  *
  * One pair alone is only reported. The machine counts as finished when two pairs
  * are heard one, two or three periods of 17.19 s apart at the same pitch.
+ *
+ * Only one of the two has to be a clear pair. On 2026-11-20 someone was talking
+ * beside the microphone and one beep of each later pair was half covered, so the
+ * other may be a weak pair: the right shape, less exactly, with nothing asked of its
+ * level or of how steady its pitch is. In return it has to sit closer to the period.
  */
 import { SAMPLE_RATE } from "./matcher";
 
@@ -87,6 +92,10 @@ export interface WasherConfig {
   maxPeriods: number;
   /** ... and their pitch differs by no more than this. */
   maxPitchDiffHz: number;
+  /** A weak pair follows the shape at least this well and meets minDepthDb and minQuietDb; level and wobble are not asked. */
+  weakScore: number;
+  /** A clear pair and a weak one belong together only this close to a whole number of periods. */
+  weakPeriodToleranceS: number;
   /** A pair that falls short is still reported when its shape scores this well. */
   nearScore: number;
   /** After "finished", further pairs are reported but do not finish again for this long. */
@@ -102,6 +111,8 @@ export const defaultWasherConfig: WasherConfig = {
   periodToleranceS: 0.35,
   maxPeriods: 3,
   maxPitchDiffHz: 1,
+  weakScore: 0.6,
+  weakPeriodToleranceS: 0.2,
   nearScore: 0.7,
   cooldownS: 600,
 };
@@ -122,6 +133,8 @@ export interface WasherPair {
   wobbleHz: number;
   /** Whether it met every condition for one pair. */
   accepted: boolean;
+  /** Whether it is at least a weak pair, which finishes only together with an accepted one. */
+  weak: boolean;
 }
 
 export type WasherEvent =
@@ -245,6 +258,7 @@ export class WasherListener {
             accepted:
               score >= cfg.minScore && levelDb >= cfg.minLevelDb && depthDb >= cfg.minDepthDb &&
               quietDb >= cfg.minQuietDb && wobbleHz <= cfg.maxWobbleHz,
+            weak: score >= cfg.weakScore && depthDb >= cfg.minDepthDb && quietDb >= cfg.minQuietDb,
           };
         }
         this.best.last = n;
@@ -258,7 +272,7 @@ export class WasherListener {
       if (pair.accepted || (pair.score >= this.cfg.nearScore && pair.depthDb >= this.cfg.minDepthDb)) {
         out.push({ type: "pair", t, ...pair });
       }
-      if (pair.accepted) this.accept(pair, t, out);
+      if (pair.accepted || pair.weak) this.accept(pair, t, out);
     }
   }
 
@@ -269,9 +283,12 @@ export class WasherListener {
     for (let i = this.pairs.length - 1; i >= 0 && t >= this.quietUntil; i--) {
       const p = this.pairs[i]!;
       const gap = pair.startT - p.startT, periods = Math.round(gap / PAIR_PERIOD_S);
+      // at least one of the two must be a clear pair
+      if (!pair.accepted && !p.accepted) continue;
+      const tolerance = pair.accepted && p.accepted ? cfg.periodToleranceS : cfg.weakPeriodToleranceS;
       if (
         periods >= 1 && periods <= cfg.maxPeriods &&
-        Math.abs(gap - periods * PAIR_PERIOD_S) <= cfg.periodToleranceS &&
+        Math.abs(gap - periods * PAIR_PERIOD_S) <= tolerance &&
         Math.abs(pair.pitchHz - p.pitchHz) <= cfg.maxPitchDiffHz
       ) {
         out.push({ type: "finished", t, first: p, second: pair, periods });

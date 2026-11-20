@@ -111,6 +111,7 @@ const pairInfo = (p: WasherPair) => ({
   levelDb: Math.round(p.levelDb * 10) / 10,
   pitchHz: Math.round(p.pitchHz * 100) / 100,
   wobbleHz: Math.round(p.wobbleHz * 100) / 100,
+  accepted: p.accepted,
 });
 
 function onWasherAudio(samples: Int16Array) {
@@ -135,7 +136,7 @@ function onWasherAudio(samples: Int16Array) {
     });
     console.log(
       washerWebhook ? "Washing machine finished..." : "Washing machine finished (not sent, no webhook set):",
-      `two beep pairs ${gapS.toFixed(2)} s apart, scores ${ev.first.score.toFixed(2)} and ${ev.second.score.toFixed(2)}, ${ev.second.pitchHz.toFixed(1)} Hz,`,
+      `${ev.first.accepted && ev.second.accepted ? "two beep pairs" : "a beep pair and a weak one"} ${gapS.toFixed(2)} s apart, scores ${ev.first.score.toFixed(2)} and ${ev.second.score.toFixed(2)}, ${ev.second.pitchHz.toFixed(1)} Hz,`,
       clip
     );
     if (washerWebhook) void webhook(washerWebhook);
